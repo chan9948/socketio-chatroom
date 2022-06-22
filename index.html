@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>socket io chatroom</title>
+  </head>
+  <body>
+    <div id="mainContainer">
+      <div id="msg">connecting server...</div>
+      <div class="row">
+        <input placeholder="login string" class="noShow" id="loginStringInput"></input>
+        <div id="loginStringBtn" class="button noShow">sign-up/<br/>sign-in</div>
+      </div>
+      <div class="row">
+        <input placeholder="your name" class="noShow" id="nameInput"></input>
+        <div id="nameBtn" class="button noShow">confirm/<br/>change</div>
+      </div>
+      <div class="row">
+        <input placeholder="room code" class="noShow" id="roomCodeInput"></input>
+        <div id="roomBtn" class="button noShow">enter</div>
+      </div>
+      <div id="messageContainer" class="noShow">
+        <!-- <div class="message othersMessage"><div class="name">name</div><div class="content">content</div></div>
+        <div class="message selfMessage">dasdas</div> -->
+      </div>
+      <input id="messageInput" class="noShow" placeholder="Message..."></input>
+      <div class="row">
+        <div id="messageBtn" class="button noShow">send</div>
+      </div>
+    </div>
+  </body>
+  <style>
+    body,html {margin: 0;padding: 0;}   
+    * {box-sizing: border-box;}
+    body {width: 100vw; height: 100vh;}
+    #mainContainer {background-color: #e4ddf1;margin: auto; width: min(450px,100%); height: 100%; display: flex; flex-direction: column;}
+    #messageContainer {flex-grow: 1; overflow-y: auto;padding: 1.5em;}
+    #messageInput {width: 100%;}
+    input{font-size: 2em;line-height: 1.8em;width: min(400px,85%);}
+    .button{height: 100%; width: auto;min-width: 60px; margin: 0;flex-grow: 1;text-align: center;cursor:pointer;background-color: gainsboro;display: flex;align-items: center;justify-content: center}
+    .row{display: flex; }
+    .row>div{min-height: 3.5em;}
+    .message{margin-bottom:0.3em; border-radius: 0.3em; padding: 0.3em;clear: both;}
+    .message .name{font-size: 1.2em;background-color: #dbdbdb;border-radius: 0.3em;padding: 0 0.3em;width: fit-content;}
+    .message .content{font-size: 1.75em}
+    .othersMessage{float:left;background-color: rgb(229, 233, 233)}
+    .selfMessage{float: right;background-color: rgb(197, 255, 209)}
+    .noShow {display: none !important;}
+    #msg{font-size: 2em; background-color:sandybrown;padding: 0.5em;}
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "socket.io-client": "https://cdn.socket.io/4.4.1/socket.io.esm.min.js"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import { io } from "socket.io-client";
+
+    //ui element
+    const msg = document.querySelector("#msg")
+    const loginStringInput = document.querySelector("#loginStringInput")
+    const loginStringBtn = document.querySelector("#loginStringBtn")
+    const nameInput = document.querySelector("#nameInput")
+    const nameBtn = document.querySelector("#nameBtn")
+    const roomCodeInput = document.querySelector("#roomCodeInput")
+    const roomBtn = document.querySelector("#roomBtn")
+    const messageInput = document.querySelector("#messageInput")
+    const messageBtn = document.querySelector("#messageBtn")
+    const messageContainer = document.querySelector("#messageContainer")
+
+    //const
+    // const ENDPOINT = "http://127.0.0.1:3000/"
+    const EVENT_DICT = {
+      NAME:"name",
+      ROOM: "room",
+      ROOM_DATA:"roomData",
+      ERR:"err",
+      CONNECT:"connect",
+      MESSAGE:"message",
+      MESSAGE_DATA:"messageData",
+      USER_DATA: "userData",
+      LOGIN: "login"
+    }
+    const LOCAL_STORAGE_DICT = {
+      LOGIN_STRING: "loginString",
+      ROOM_CODE: "roomCode"
+    }
+    const isRememberMe = false
+
+    //var
+    // const socket = io(ENDPOINT)
+    const socket = io()
+    let user = null
+    let room = {}
+    let lastMessage = null
+
+    //event listener
+    socket.on(EVENT_DICT.CONNECT, () => {
+      showElement([loginStringInput,loginStringBtn])
+      hideElement([msg])
+
+      //auto login if applicable
+      
+      let lsLoginString = getLocalStorage(LOCAL_STORAGE_DICT.LOGIN_STRING)
+      if(isRememberMe && lsLoginString !== null) {
+        loginStringInput.value = lsLoginString
+        login()
+      }
+    });
+
+    socket.on(EVENT_DICT.USER_DATA, (userData)=>{
+      user = userData
+      nameInput.value = user?.name ?? ""
+      
+      hideElement([loginStringInput, loginStringBtn])
+      showElement([nameInput ,nameBtn ,roomCodeInput, roomBtn])
+      showMsg(`you are now "${user.name}"`)
+      setLocalStorage(LOCAL_STORAGE_DICT.LOGIN_STRING, user.loginString)
+
+      //auto enter last room if applicable
+      let lsRoomCode = getLocalStorage(LOCAL_STORAGE_DICT.ROOM_CODE)
+      if(isRememberMe && user !== null && lsRoomCode !== null) {
+        roomCodeInput.value = lsRoomCode
+        changeRoomCode()
+      }
+    })
+
+    socket.on(EVENT_DICT.ROOM_DATA, (roomData)=>{
+      room = roomData
+      initRoom()
+      showElement([messageContainer, messageInput, messageBtn])
+      showMsg(`joined room "${room.code}"`)
+      setLocalStorage(LOCAL_STORAGE_DICT.ROOM_CODE, roomData.code)
+    });
+
+    socket.on(EVENT_DICT.MESSAGE_DATA, (message)=>{
+      updateMessage(message)
+    })
+
+    //action
+    const login = () => {
+      socket.emit(EVENT_DICT.LOGIN, loginStringInput.value)
+    }
+    
+    const changeName = () => {
+      socket.emit(EVENT_DICT.NAME, nameInput.value)
+    }
+    
+    const changeRoomCode = () => {
+      socket.emit(EVENT_DICT.ROOM, roomCodeInput.value)
+    }
+
+    const sendMessage = () => {
+      socket.emit(EVENT_DICT.MESSAGE, messageInput.value)
+      messageInput.value = ""
+    }
+    
+    //method
+    const getLocalStorage=(key) =>{
+      return localStorage.getItem(key)
+    }
+
+    const setLocalStorage=(key, value) =>{
+      localStorage.setItem(key, value)
+    }
+
+    //ui fn
+    const showElement = (elements = []) =>{
+      elements.forEach((element)=>{element.classList.remove("noShow")})
+    }
+
+    const hideElement = (elements = []) =>{
+      elements.forEach((element)=>{element.classList.add("noShow")})
+    }
+
+    const initUi = ()=>{
+      loginStringBtn.addEventListener("click",(e)=>{
+        login()
+      }) 
+      nameBtn.addEventListener("click",(e)=>{
+        changeName()
+      }) 
+      roomBtn.addEventListener("click",(e)=>{
+        changeRoomCode()
+      }) 
+      messageBtn.addEventListener("click",(e)=>{
+        sendMessage()
+      })
+      loginStringInput.addEventListener("keypress", (e)=> {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          loginStringBtn.click();
+        }
+      });
+      nameInput.addEventListener("keypress", (e)=> {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          nameBtn.click();
+        }
+      });
+      roomCodeInput.addEventListener("keypress", (e)=> {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          roomBtn.click();
+        }
+      });
+      messageInput.addEventListener("keypress", (e)=> {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          messageBtn.click();
+        }
+      });
+    }
+
+    const showMsg=(content, isErr = false ,timeout = 3000) =>{
+      msg.classList.remove("noShow")
+      if(isErr) {
+        msg.style.color = "red"
+      }else {
+        msg.style.color = "black"
+      }      
+      msg.innerHTML = content
+      setTimeout(()=>{
+        msg.classList.add("noShow")
+      }, timeout)
+    }
+
+    const appendMessage = (message)=>{
+      let messageElement = document.createElement("div")
+      let nameElement = null
+      let contentElement = document.createElement("div")
+
+      messageElement.classList.add("message")
+      messageElement.classList.add(message.senderId === user.id?"selfMessage":"othersMessage")
+      
+      contentElement.innerHTML = message.content
+      contentElement.classList.add("content")
+
+      //append name
+      if(lastMessage === null ? true : lastMessage?.senderName !== message.senderName) {
+        nameElement = document.createElement("div")
+        nameElement.innerHTML = message.senderName
+        nameElement.classList.add("name")
+        messageElement.appendChild(nameElement)
+      }
+
+      messageElement.appendChild(contentElement)
+      messageContainer.appendChild(messageElement)
+      lastMessage = message
+    }
+
+    const initRoom = ()=>{
+      if(room?.messages !== undefined) {
+        messageContainer.innerHTML = ""
+        lastMessage = null
+        room.messages.forEach((message)=>{
+          appendMessage(message)         
+        })
+        //scroll to bottom
+      }
+    }
+
+    const updateMessage = (message)=>{
+      if(Array.isArray(room?.messages)) {
+        room.messages.push(message)
+        appendMessage(message)
+      }
+    }
+
+    initUi()
+
+  </script>
+</html>
