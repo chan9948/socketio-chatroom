@@ -90,7 +90,7 @@
       LOGIN_STRING: "loginString",
       ROOM_CODE: "roomCode"
     }
-    const isRememberMe = false
+    const isRememberMe = true
 
     //var
     // const socket = io(ENDPOINT)
@@ -261,15 +261,25 @@
         room.messages.forEach((message)=>{
           appendMessage(message)         
         })
-        //scroll to bottom
+        scrollToBottom()
       }
     }
 
     const updateMessage = (message)=>{
       if(Array.isArray(room?.messages)) {
+        //check already at bottom
+        let isAtBottom = Math.ceil(messageContainer.offsetHeight + messageContainer.scrollTop) >= messageContainer.scrollHeight
+        let isSelfMessage = message.senderId === user.id
         room.messages.push(message)
         appendMessage(message)
+        if(isAtBottom || isSelfMessage) {
+          scrollToBottom()
+        }
       }
+    }
+
+    const scrollToBottom = () =>{
+      messageContainer.scrollTo(0, messageContainer.scrollHeight);
     }
 
     initUi()
