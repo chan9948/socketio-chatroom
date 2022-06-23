@@ -8,6 +8,9 @@
     "dev": "nodemon index.js",
     "start": "node index.js"
   },
+  "engines": {
+    "node": "16.13.2"
+  },
   "type": "module",
   "author": "",
   "license": "ISC",
